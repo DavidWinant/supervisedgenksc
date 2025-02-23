@@ -1,0 +1,25 @@
+.venv/
+build/
+.vscode/
+mnist/
+stiefel/
+src/__pycache__/
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Dependency directories and build artifacts
+node_modules/
+dist/
+*.egg-info
+
+# IDE and editor configurations
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Log files and temporary files
+*.log
+tmp/
+temp/
+
