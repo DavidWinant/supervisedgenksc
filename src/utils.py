@@ -369,36 +369,83 @@ def interpolate_along_clusters(point1, point2, n_steps):
     return np.asarray(vectors)
 
 
-def assign_clusters(Z, u=None, phic=None):
-
+def assign_clusters(
+    Z: torch.Tensor, u: torch.Tensor | None = None, phic: torch.Tensor | None = None
+):
     if Z is not None:
-        Z = Z.detach().cpu().numpy()
-        Z_sign = np.sign(Z)
+        Z_tensor = Z.detach().cpu()
+        Z_sign = torch.sign(Z_tensor)
         N, k = Z.shape[0], Z.shape[1] + 1
     elif u is not None and phic is not None:
-        Z = (phic @ u).detach().cpu().numpy()
-        Z_sign = np.sign(Z)
+        Z_tensor = (phic @ u).detach().cpu()
+        Z_sign = torch.sign(Z_tensor)
+        N, k = Z_tensor.shape[0], Z_tensor.shape[1] + 1
     else:
-        return None
-    N, k = Z.shape[0], Z.shape[1] + 1
-
+        return None, None
+        
     # get codebook
-    codes, counts = np.unique(Z_sign, axis=0, return_counts=True)
-    ind = np.flip(np.argsort(counts))
+    cluster_prototypes, counts = torch.unique(Z_sign, dim=0, return_counts=True)
+    ind = torch.flip(torch.argsort(counts), dims=[0])
     ind = ind[:k]
-    codes = codes[ind]
-    if codes.shape[0] < k:
-        return None
-    else:
-        # Assign hard clustering
-        cl = np.zeros([N, k], dtype=int)
-        for i in range(N):
-            Hamdist = np.zeros(k)
-            for j in range(k):
-                Hamdist[j] = np.sum(np.abs(Z[i, :] - codes[j, :]))
-            cl[i, np.argmin(Hamdist)] = 1
+    if ind.shape[0] < k:  # Check if we have enough unique cluster prototypes
+        return None, None
+        
+    cluster_prototypes = cluster_prototypes[ind]
+    
+    # Assign hard clustering
+    cl = torch.zeros([N, k], dtype=torch.int)
+    for i in range(N):
+        Hamdist = torch.zeros(k)
+        for j in range(k):
+            Hamdist[j] = torch.sum(torch.abs(Z_tensor[i, :] - cluster_prototypes[j, :]))
+        cl[i, torch.argmin(Hamdist)] = 1
 
-        return cl, Z
+    return cl, Z_tensor
+
+
+def assign_soft_clusters(e : torch.Tensor, cluster_prototypes: torch.Tensor) -> torch.Tensor:
+    """
+    Assigns soft clusters using cosine distance with PyTorch.
+
+    Parameters:
+        e (torch.Tensor): Score variables of shape (n_samples, k-1).
+        cluster_prototypes (torch.Tensor)
+
+    Returns:
+        torch.Tensor: Soft cluster membership matrix of shape (n_samples, k).
+    """
+    n_samples, n_features = e.shape
+    print(n_samples, n_features)
+    k = cluster_prototypes.shape[0]
+
+    if k == 2:
+        # Calculate score values for clustering
+        z = e[:, :k]
+        # Calculate Euclidean distance dcos between score values Z and prototypes cluster_prototypes
+        dcos = torch.norm(z[:, None] - cluster_prototypes, dim=2)
+    else:
+        # Calculate score values for clustering
+        z = e[:, : k - 1]
+        # Calculate Cosine distances to prototypes
+        dcos = torch.ones(z.shape[0], z.shape[1] + 1) - z @ torch.t(
+            cluster_prototypes
+        ) / torch.outer(
+            torch.sqrt(torch.diag(z @ torch.t(z))),
+            torch.sqrt(torch.diag(cluster_prototypes @ torch.t(cluster_prototypes))),
+        )
+    # Compute soft memberships
+    soft_memberships = torch.zeros(n_samples, k)
+    for i in range(n_samples):
+        for q in range(k):
+            product = torch.prod(dcos[i, torch.arange(k) != q])
+            soft_memberships[i, q] = product
+
+        # Only normalize if sum is non-zero
+        row_sum = torch.sum(soft_memberships[i, :])
+        if row_sum > 0:
+            soft_memberships[i, :] /= row_sum
+
+    return soft_memberships
 
 
 def ams(u, phic):

@@ -1,18 +1,18 @@
 proc: "cpu"  # or "cuda"
-epochs: 2
-k: 10
+epochs: 200
+k: 3
 lr: 0.001
 mb_size: 64
+alpha: 0.9
 h_dim: 10
-x_fdim1: 784
-x_fdim2: 128
-k: 10
+x_fdim1: 32 #784
+x_fdim2: 16 #128
 c_ksc: 1.0
 c_accu: 1.0
 c_clust: 1.0
 c_balance: 0.5
 capacity: 64
-dataset_name: "mnist"
+dataset_name: "gaussian"
 shuffle: true
 workers: 0
 data_path: "data/dataset"
